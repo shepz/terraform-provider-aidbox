@@ -30,6 +30,7 @@ type ScaffoldingProvider struct {
 // ScaffoldingProviderModel describes the provider data model.
 type ScaffoldingProviderModel struct {
 	Endpoint types.String `tfsdk:"endpoint"`
+	Token    types.String `tfsdk:"token"`
 }
 
 func (p *ScaffoldingProvider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {

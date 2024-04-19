@@ -10,3 +10,7 @@ terraform {
 provider "aidboxlicense" {
   endpoint = "http://localhost:8080"
 }
+
+resource "aidboxlicense_example" "example" {
+  configurable_attribute = "some-value"
+}
