@@ -33,7 +33,7 @@ type ScaffoldingProviderModel struct {
 }
 
 func (p *ScaffoldingProvider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
-	resp.TypeName = "scaffolding"
+	resp.TypeName = "aidboxlicense"
 	resp.Version = p.version
 }
 
@@ -41,8 +41,12 @@ func (p *ScaffoldingProvider) Schema(ctx context.Context, req provider.SchemaReq
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"endpoint": schema.StringAttribute{
-				MarkdownDescription: "Example provider attribute",
-				Optional:            true,
+				MarkdownDescription: "Aidbox RPC API endpoint",
+				Required:            true,
+			},
+			"token": schema.StringAttribute{
+				MarkdownDescription: "Aidbox token",
+				Required:            true,
 			},
 		},
 	}
