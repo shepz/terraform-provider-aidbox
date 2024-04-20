@@ -12,5 +12,6 @@ provider "aidbox" {
 }
 
 resource "aidbox_license" "example" {
-  configurable_attribute = "some-value"
+  name = "test-tf-guigui"
+  type = "standard"
 }

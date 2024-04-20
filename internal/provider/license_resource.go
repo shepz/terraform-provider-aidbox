@@ -11,9 +11,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
@@ -33,9 +30,24 @@ type LicenseResource struct {
 
 // LicenseResourceModel describes the resource data model.
 type LicenseResourceModel struct {
-	ConfigurableAttribute types.String `tfsdk:"configurable_attribute"`
-	Defaulted             types.String `tfsdk:"defaulted"`
-	Id                    types.String `tfsdk:"id"`
+	ID              types.String `tfsdk:"id"`
+	Name            types.String `tfsdk:"name"`
+	Product         types.String `tfsdk:"product"`
+	Type            types.String `tfsdk:"type"`
+	Expiration      types.String `tfsdk:"expiration"`
+	Status          types.String `tfsdk:"status"`
+	MaxInstances    types.Int64  `tfsdk:"max_instances"`
+	Additional      types.Map    `tfsdk:"additional"`
+	CreatorID       types.String `tfsdk:"creator_id"`
+	ProjectID       types.String `tfsdk:"project_id"`
+	Offline         types.Bool   `tfsdk:"offline"`
+	Created         types.String `tfsdk:"created"`
+	MetaLastUpdated types.String `tfsdk:"meta_last_updated"`
+	MetaCreatedAt   types.String `tfsdk:"meta_created_at"`
+	MetaVersionID   types.String `tfsdk:"meta_version_id"`
+	Issuer          types.String `tfsdk:"issuer"`
+	InfoHosting     types.String `tfsdk:"info_hosting"`
+	JWT             types.String `tfsdk:"jwt"`
 }
 
 func (r *LicenseResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -44,26 +56,58 @@ func (r *LicenseResource) Metadata(ctx context.Context, req resource.MetadataReq
 
 func (r *LicenseResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		// This description is used by the documentation generator and the language server.
-		MarkdownDescription: "Example resource",
-
+		MarkdownDescription: "Manages an Aidbox license",
 		Attributes: map[string]schema.Attribute{
-			"configurable_attribute": schema.StringAttribute{
-				MarkdownDescription: "Example configurable attribute",
-				Optional:            true,
-			},
-			"defaulted": schema.StringAttribute{
-				MarkdownDescription: "Example configurable attribute with default value",
-				Optional:            true,
-				Computed:            true,
-				Default:             stringdefault.StaticString("example value when not configured"),
-			},
 			"id": schema.StringAttribute{
-				Computed:            true,
-				MarkdownDescription: "Example identifier",
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
+				Computed: true,
+			},
+			"name": schema.StringAttribute{
+				Required: true,
+			},
+			"product": schema.StringAttribute{
+				Computed: true,
+			},
+			"type": schema.StringAttribute{
+				Required: true,
+			},
+			"expiration": schema.StringAttribute{
+				Computed: true,
+			},
+			"status": schema.StringAttribute{
+				Computed: true,
+			},
+			"max_instances": schema.Int64Attribute{
+				Computed: true,
+			},
+			"creator_id": schema.StringAttribute{
+				Computed: true,
+			},
+			"project_id": schema.StringAttribute{
+				Computed: true,
+			},
+			"offline": schema.BoolAttribute{
+				Computed: true,
+			},
+			"created": schema.StringAttribute{
+				Computed: true,
+			},
+			"meta_last_updated": schema.StringAttribute{
+				Computed: true,
+			},
+			"meta_created_at": schema.StringAttribute{
+				Computed: true,
+			},
+			"meta_version_id": schema.StringAttribute{
+				Computed: true,
+			},
+			"issuer": schema.StringAttribute{
+				Computed: true,
+			},
+			"info_hosting": schema.StringAttribute{
+				Computed: true,
+			},
+			"jwt": schema.StringAttribute{
+				Computed: true,
 			},
 		},
 	}
@@ -109,7 +153,7 @@ func (r *LicenseResource) Create(ctx context.Context, req resource.CreateRequest
 
 	// For the purposes of this example code, hardcoding a response value to
 	// save into the Terraform state.
-	data.Id = types.StringValue("example-id")
+	data.ID = types.StringValue("example-id")
 
 	// Write logs using the tflog package
 	// Documentation: https://terraform.io/plugin/log
