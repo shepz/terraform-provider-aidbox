@@ -11,6 +11,6 @@ provider "aidbox" {
   endpoint = "http://localhost:8080"
 }
 
-resource "aidbox_example" "example" {
+resource "aidbox_license" "example" {
   configurable_attribute = "some-value"
 }
