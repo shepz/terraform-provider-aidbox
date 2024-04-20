@@ -1,11 +1,12 @@
-// Copyright (c) HashiCorp, Inc.
 // SPDX-License-Identifier: MPL-2.0
 
 package provider
 
 import (
 	"context"
+	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"net/http"
+	"os" // Import for environment variables
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/function"
@@ -19,15 +20,10 @@ import (
 var _ provider.Provider = &ScaffoldingProvider{}
 var _ provider.ProviderWithFunctions = &ScaffoldingProvider{}
 
-// ScaffoldingProvider defines the provider implementation.
 type ScaffoldingProvider struct {
-	// version is set to the provider version on release, "dev" when the
-	// provider is built and ran locally, and "test" when running acceptance
-	// testing.
 	version string
 }
 
-// ScaffoldingProviderModel describes the provider data model.
 type ScaffoldingProviderModel struct {
 	Endpoint types.String `tfsdk:"endpoint"`
 	Token    types.String `tfsdk:"token"`
@@ -43,11 +39,11 @@ func (p *ScaffoldingProvider) Schema(ctx context.Context, req provider.SchemaReq
 		Attributes: map[string]schema.Attribute{
 			"endpoint": schema.StringAttribute{
 				MarkdownDescription: "Aidbox RPC API endpoint",
-				Required:            true,
+				Optional:            true,
 			},
 			"token": schema.StringAttribute{
 				MarkdownDescription: "Aidbox token",
-				Required:            true,
+				Optional:            true,
 			},
 		},
 	}
@@ -62,8 +58,25 @@ func (p *ScaffoldingProvider) Configure(ctx context.Context, req provider.Config
 		return
 	}
 
-	// Configuration values are now available.
-	// if data.Endpoint.IsNull() { /* ... */ }
+	// Set default endpoint if not provided
+	if data.Endpoint.IsNull() || data.Endpoint.IsUnknown() || data.Endpoint.ValueString() == "" {
+		defaultEndpoint := basetypes.NewStringValue("https://aidbox.app/rpc")
+		data.Endpoint = defaultEndpoint
+	}
+
+	// Handle token; get from environment variable if not provided
+	if data.Token.IsNull() || data.Token.IsUnknown() || data.Token.ValueString() == "" {
+		tokenEnv := os.Getenv("AIDBOX_TOKEN")
+		if tokenEnv != "" {
+			data.Token = basetypes.NewStringValue(tokenEnv)
+		} else {
+			resp.Diagnostics.AddError(
+				"No Token Provided",
+				"Please provide a 'token' in the provider configuration or through the 'AIDBOX_TOKEN' environment variable.",
+			)
+			return
+		}
+	}
 
 	// Example client configuration for data sources and resources
 	client := http.DefaultClient
