@@ -1,16 +1,16 @@
 terraform {
   required_providers {
-    aidboxlicense = {
-      source = "hashicorp.com/edu/aidboxlicense"
+    aidbox = {
+      source = "hashicorp.com/edu/aidbox"
       version = "~> 1.0"
     }
   }
 }
 
-provider "aidboxlicense" {
+provider "aidbox" {
   endpoint = "http://localhost:8080"
 }
 
-resource "aidboxlicense_example" "example" {
+resource "aidbox_example" "example" {
   configurable_attribute = "some-value"
 }

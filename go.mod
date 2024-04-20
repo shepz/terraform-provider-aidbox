@@ -1,4 +1,4 @@
-module terraform-provider-aidboxlicense
+module terraform-provider-aidbox
 
 go 1.21
 
