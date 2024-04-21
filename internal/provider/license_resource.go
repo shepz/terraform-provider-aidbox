@@ -6,6 +6,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"gopkg.in/yaml.v3"
 	"io/ioutil"
@@ -190,6 +191,23 @@ func (r *LicenseResource) Create(ctx context.Context, req resource.CreateRequest
 	}
 
 	tflog.Debug(ctx, fmt.Sprintf("API Response %s", apiResp.Result.JWT))
+	data.ID = basetypes.NewStringValue(apiResp.Result.License.ID)
+	data.Name = basetypes.NewStringValue(apiResp.Result.License.Name)
+	data.Product = basetypes.NewStringValue(apiResp.Result.License.Product)
+	data.Type = basetypes.NewStringValue(apiResp.Result.License.Type)
+	data.Expiration = basetypes.NewStringValue(apiResp.Result.License.Expiration)
+	data.Status = basetypes.NewStringValue(apiResp.Result.License.Status)
+	data.MaxInstances = basetypes.NewInt64Value(int64(apiResp.Result.License.MaxInstances))
+	data.CreatorID = basetypes.NewStringValue(apiResp.Result.License.Creator.ID)
+	data.ProjectID = basetypes.NewStringValue(apiResp.Result.License.Project.ID)
+	data.Offline = basetypes.NewBoolValue(apiResp.Result.License.Offline)
+	data.Created = basetypes.NewStringValue(apiResp.Result.License.Created)
+	data.MetaLastUpdated = basetypes.NewStringValue(apiResp.Result.License.Meta.LastUpdated)
+	data.MetaCreatedAt = basetypes.NewStringValue(apiResp.Result.License.Meta.CreatedAt)
+	data.MetaVersionID = basetypes.NewStringValue(apiResp.Result.License.Meta.VersionID)
+	data.Issuer = basetypes.NewStringValue(apiResp.Result.License.Issuer)
+	data.InfoHosting = basetypes.NewStringValue(apiResp.Result.License.Info.Hosting)
+	data.JWT = basetypes.NewStringValue(apiResp.Result.JWT)
 
 	// Process data further or set it in the state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
