@@ -5,9 +5,8 @@ package provider
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"gopkg.in/yaml.v3"
 	"io/ioutil"
 	"net/http"
@@ -17,7 +16,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -71,7 +69,7 @@ func (r *LicenseResource) Schema(ctx context.Context, req resource.SchemaRequest
 				Required: true,
 			},
 			"product": schema.StringAttribute{
-				Computed: true,
+				Required: true,
 			},
 			"type": schema.StringAttribute{
 				Required: true,
@@ -148,66 +146,52 @@ func (r *LicenseResource) Create(ctx context.Context, req resource.CreateRequest
 		return
 	}
 
-	tflog.Debug(ctx, "Creating new license", map[string]interface{}{"name": data.Name.String()})
-
-	// Manually set default values if not provided
-	if data.Product.IsNull() || data.Product.IsUnknown() {
-		data.Product = basetypes.NewStringValue("aidbox")
-	}
-
-	// Prepare the API request body
-	requestBody := fmt.Sprintf("method: portal.portal/issue-license\nparams:\n  token: %s\n  name: %s\n  product: %s\n  type: %s",
-		r.token, data.Name.String(), data.Product.String(), data.Type.String())
-
-	tflog.Debug(ctx, "API Request Body", map[string]interface{}{"request": requestBody})
-
-	httpReq, err := http.NewRequest("POST", fmt.Sprintf("%s/rpc", r.endpoint), strings.NewReader(requestBody))
+	yamlRequestBody, err := createYAMLRequestBody(data, r.token)
 	if err != nil {
-		resp.Diagnostics.AddError("Failed to create HTTP request", fmt.Sprintf("Error: %s", err))
+		resp.Diagnostics.AddError("Failed to create YAML request body", err.Error())
 		return
 	}
 
-	httpReq.Header.Add("Content-Type", "text/yaml")
-	httpReq.Header.Add("Accept", "text/yaml")
+	tflog.Debug(ctx, fmt.Sprintf("API Request %s", yamlRequestBody))
+
+	httpReq, err := http.NewRequest("POST", r.endpoint, strings.NewReader(yamlRequestBody))
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to create HTTP request", err.Error())
+		return
+	}
+	httpReq.Header.Set("Content-Type", "text/yaml")
+	httpReq.Header.Set("Accept", "text/yaml")
 
 	httpResp, err := r.client.Do(httpReq)
 	if err != nil {
-		resp.Diagnostics.AddError("API Call Failed", fmt.Sprintf("Could not issue a license: %s", err))
+		resp.Diagnostics.AddError("API Call Failed", err.Error())
 		return
 	}
 	defer httpResp.Body.Close()
 
+	tflog.Debug(ctx, fmt.Sprintf("API Response Status %s", httpResp.Status))
+
 	bodyBytes, err := ioutil.ReadAll(httpResp.Body)
 	if err != nil {
-		resp.Diagnostics.AddError("Failed to read response body", fmt.Sprintf("Error: %s", err))
+		resp.Diagnostics.AddError("Failed to read response body", err.Error())
 		return
 	}
+	tflog.Debug(ctx, fmt.Sprintf("API Response Body %s", string(bodyBytes)))
 
-	// Check if response body is empty
 	if len(bodyBytes) == 0 {
-		resp.Diagnostics.AddError("Empty Response", "The API response is empty, expected JSON.")
+		resp.Diagnostics.AddError("Empty Response", "The API response is empty, expected YAML.")
 		return
 	}
 
-	// Log the response body
-	tflog.Debug(ctx, "API Response Body", map[string]interface{}{"response": string(bodyBytes)})
-
-	// Parse JSON
-	if err := json.Unmarshal(bodyBytes, &data); err != nil {
-		resp.Diagnostics.AddError("Failed to parse response body", fmt.Sprintf("Error parsing JSON: %s; Response Body: %s", err, string(bodyBytes)))
+	var apiResp APIResponse
+	if err := yaml.Unmarshal(bodyBytes, &apiResp); err != nil {
+		resp.Diagnostics.AddError("Failed to parse response body", fmt.Sprintf("Error parsing YAML: %s; Response Body: %s", err, string(bodyBytes)))
 		return
 	}
 
-	// Set the ID and other computed attributes from the API response
-	if data.ID.String() == "" {
-		// Assuming that the API response contains an 'id' for the license
-		data.ID = basetypes.NewStringValue("extracted-id-from-response") // Update this line to extract the actual ID
-	}
+	tflog.Debug(ctx, fmt.Sprintf("API Response %s", apiResp.Result.JWT))
 
-	// Log the creation
-	tflog.Debug(ctx, "Created new license", map[string]interface{}{"license_id": data.ID.String()})
-
-	// Save data into Terraform state
+	// Process data further or set it in the state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -283,9 +267,9 @@ func createYAMLRequestBody(data LicenseResourceModel, token string) (string, err
 		"method": "portal.portal/issue-license",
 		"params": map[string]string{
 			"token":   token,
-			"name":    data.Name.String(),
-			"product": data.Product.String(),
-			"type":    data.Type.String(),
+			"name":    data.Name.ValueString(),
+			"product": data.Product.ValueString(),
+			"type":    data.Type.ValueString(),
 		},
 	}
 
@@ -294,4 +278,55 @@ func createYAMLRequestBody(data LicenseResourceModel, token string) (string, err
 		return "", err
 	}
 	return string(yamlData), nil
+}
+
+// Assuming your response structure matches this model
+type APIResponse struct {
+	Result struct {
+		Cluster    interface{} `yaml:"cluster"`
+		Deployment interface{} `yaml:"deployment"`
+		License    struct {
+			Offline bool `yaml:"offline"`
+			Meta    struct {
+				LastUpdated string `yaml:"lastUpdated"`
+				CreatedAt   string `yaml:"createdAt"`
+				VersionID   string `yaml:"versionId"`
+			} `yaml:"meta"`
+			Creator struct {
+				ID           string `yaml:"id"`
+				ResourceType string `yaml:"resourceType"`
+			} `yaml:"creator"`
+			Name         string `yaml:"name"`
+			Expiration   string `yaml:"expiration"`
+			Type         string `yaml:"type"`
+			Created      string `yaml:"created"`
+			ResourceType string `yaml:"resourceType"`
+			MaxInstances int    `yaml:"max-instances"`
+			Product      string `yaml:"product"`
+			Project      struct {
+				ID           string `yaml:"id"`
+				ResourceType string `yaml:"resourceType"`
+			} `yaml:"project"`
+			Status string `yaml:"status"`
+			ID     string `yaml:"id"`
+			Info   struct {
+				Hosting string `yaml:"hosting"`
+			} `yaml:"info"`
+			Issuer     string `yaml:"issuer"`
+			Additional struct {
+				ExpirationDays int    `yaml:"expiration-days"`
+				BoxURL         string `yaml:"box-url"`
+			} `yaml:"additional"`
+		} `yaml:"license"`
+		JWT string `yaml:"jwt"`
+	} `yaml:"result"`
+}
+
+// Example function to parse YAML
+func parseYAMLResponse(body []byte) (*APIResponse, error) {
+	var resp APIResponse
+	if err := yaml.Unmarshal(body, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
 }

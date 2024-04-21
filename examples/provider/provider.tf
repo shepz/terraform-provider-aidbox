@@ -8,10 +8,11 @@ terraform {
 }
 
 provider "aidbox" {
-  endpoint = "http://localhost:8080"
+  endpoint = "https://aidbox.app/rpc"
 }
 
 resource "aidbox_license" "example" {
   name = "test-tf-guigui"
+  product = "aidbox"
   type = "standard"
 }
