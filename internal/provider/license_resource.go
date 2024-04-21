@@ -6,16 +6,12 @@ package provider
 import (
 	"context"
 	"fmt"
-	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
-	"gopkg.in/yaml.v3"
-	"net/http"
-	"strings"
-
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
+	"terraform-provider-aidbox/internal/aidboxclient"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -140,55 +136,41 @@ func (r *LicenseResource) Configure(ctx context.Context, req resource.ConfigureR
 }
 
 func (r *LicenseResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	var data LicenseResourceModel
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+	var model LicenseResourceModel
+	diags := req.Plan.Get(ctx, &model)
+	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	yamlRequestBody, err := createYAMLRequestBody(data, r.token)
+	apiResp, err := r.client.CreateLicense(ctx, model.Name.ValueString(), model.Product.ValueString(), model.Type.ValueString())
 	if err != nil {
-		resp.Diagnostics.AddError("Failed to create YAML request body", err.Error())
+		resp.Diagnostics.AddError("API Call Failed", err.Error())
 		return
 	}
 
-	tflog.Debug(ctx, fmt.Sprintf("API Request %s", yamlRequestBody))
+	mapModelFromAPIResponse(&model, apiResp)
+	resp.Diagnostics.Append(resp.State.Set(ctx, &model)...)
+}
 
-	httpReq, err := http.NewRequest("POST", r.endpoint, strings.NewReader(yamlRequestBody))
-	if err != nil {
-		resp.Diagnostics.AddError("Failed to create HTTP request", err.Error())
-		return
-	}
-	httpReq.Header.Set("Content-Type", "text/yaml")
-	httpReq.Header.Set("Accept", "text/yaml")
-
-	apiResp, err := r.client.CreateLicense(ctx, data.Name.ValueString(), data.Product.ValueString(), data.Type.ValueString())
-	if err != nil {
-		resp.Diagnostics.AddError("API call failed", err.Error())
-		return
-	}
-
-	tflog.Debug(ctx, fmt.Sprintf("API Response %s", apiResp.JWT))
-	data.ID = basetypes.NewStringValue(apiResp.License.ID)
-	data.Name = basetypes.NewStringValue(apiResp.License.Name)
-	data.Product = basetypes.NewStringValue(apiResp.License.Product)
-	data.Type = basetypes.NewStringValue(apiResp.License.Type)
-	data.Expiration = basetypes.NewStringValue(apiResp.License.Expiration)
-	data.Status = basetypes.NewStringValue(apiResp.License.Status)
-	data.MaxInstances = basetypes.NewInt64Value(int64(apiResp.License.MaxInstances))
-	data.CreatorID = basetypes.NewStringValue(apiResp.License.Creator.ID)
-	data.ProjectID = basetypes.NewStringValue(apiResp.License.Project.ID)
-	data.Offline = basetypes.NewBoolValue(apiResp.License.Offline)
-	data.Created = basetypes.NewStringValue(apiResp.License.Created)
-	data.MetaLastUpdated = basetypes.NewStringValue(apiResp.License.Meta.LastUpdated)
-	data.MetaCreatedAt = basetypes.NewStringValue(apiResp.License.Meta.CreatedAt)
-	data.MetaVersionID = basetypes.NewStringValue(apiResp.License.Meta.VersionID)
-	data.Issuer = basetypes.NewStringValue(apiResp.License.Issuer)
-	data.InfoHosting = basetypes.NewStringValue(apiResp.License.Info.Hosting)
-	data.JWT = basetypes.NewStringValue(apiResp.JWT)
-
-	// Process data further or set it in the state
-	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+func mapModelFromAPIResponse(model *LicenseResourceModel, apiResp aidboxclient.LicenseResponse) {
+	model.ID = basetypes.NewStringValue(apiResp.License.ID)
+	model.Name = basetypes.NewStringValue(apiResp.License.Name)
+	model.Product = basetypes.NewStringValue(apiResp.License.Product)
+	model.Type = basetypes.NewStringValue(apiResp.License.Type)
+	model.Expiration = basetypes.NewStringValue(apiResp.License.Expiration)
+	model.Status = basetypes.NewStringValue(apiResp.License.Status)
+	model.MaxInstances = basetypes.NewInt64Value(int64(apiResp.License.MaxInstances))
+	model.CreatorID = basetypes.NewStringValue(apiResp.License.Creator.ID)
+	model.ProjectID = basetypes.NewStringValue(apiResp.License.Project.ID)
+	model.Offline = basetypes.NewBoolValue(apiResp.License.Offline)
+	model.Created = basetypes.NewStringValue(apiResp.License.Created)
+	model.MetaLastUpdated = basetypes.NewStringValue(apiResp.License.Meta.LastUpdated)
+	model.MetaCreatedAt = basetypes.NewStringValue(apiResp.License.Meta.CreatedAt)
+	model.MetaVersionID = basetypes.NewStringValue(apiResp.License.Meta.VersionID)
+	model.Issuer = basetypes.NewStringValue(apiResp.License.Issuer)
+	model.InfoHosting = basetypes.NewStringValue(apiResp.License.Info.Hosting)
+	model.JWT = basetypes.NewStringValue(apiResp.JWT)
 }
 
 func (r *LicenseResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
@@ -256,73 +238,4 @@ func (r *LicenseResource) Delete(ctx context.Context, req resource.DeleteRequest
 
 func (r *LicenseResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
-}
-
-func createYAMLRequestBody(data LicenseResourceModel, token string) (string, error) {
-	requestBody := map[string]interface{}{
-		"method": "portal.portal/issue-license",
-		"params": map[string]string{
-			"token":   token,
-			"name":    data.Name.ValueString(),
-			"product": data.Product.ValueString(),
-			"type":    data.Type.ValueString(),
-		},
-	}
-
-	yamlData, err := yaml.Marshal(requestBody)
-	if err != nil {
-		return "", err
-	}
-	return string(yamlData), nil
-}
-
-// Assuming your response structure matches this model
-type APIResponse struct {
-	Result struct {
-		Cluster    interface{} `yaml:"cluster"`
-		Deployment interface{} `yaml:"deployment"`
-		License    struct {
-			Offline bool `yaml:"offline"`
-			Meta    struct {
-				LastUpdated string `yaml:"lastUpdated"`
-				CreatedAt   string `yaml:"createdAt"`
-				VersionID   string `yaml:"versionId"`
-			} `yaml:"meta"`
-			Creator struct {
-				ID           string `yaml:"id"`
-				ResourceType string `yaml:"resourceType"`
-			} `yaml:"creator"`
-			Name         string `yaml:"name"`
-			Expiration   string `yaml:"expiration"`
-			Type         string `yaml:"type"`
-			Created      string `yaml:"created"`
-			ResourceType string `yaml:"resourceType"`
-			MaxInstances int    `yaml:"max-instances"`
-			Product      string `yaml:"product"`
-			Project      struct {
-				ID           string `yaml:"id"`
-				ResourceType string `yaml:"resourceType"`
-			} `yaml:"project"`
-			Status string `yaml:"status"`
-			ID     string `yaml:"id"`
-			Info   struct {
-				Hosting string `yaml:"hosting"`
-			} `yaml:"info"`
-			Issuer     string `yaml:"issuer"`
-			Additional struct {
-				ExpirationDays int    `yaml:"expiration-days"`
-				BoxURL         string `yaml:"box-url"`
-			} `yaml:"additional"`
-		} `yaml:"license"`
-		JWT string `yaml:"jwt"`
-	} `yaml:"result"`
-}
-
-// Example function to parse YAML
-func parseYAMLResponse(body []byte) (*APIResponse, error) {
-	var resp APIResponse
-	if err := yaml.Unmarshal(body, &resp); err != nil {
-		return nil, err
-	}
-	return &resp, nil
 }
