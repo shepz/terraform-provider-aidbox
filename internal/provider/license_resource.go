@@ -9,7 +9,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"gopkg.in/yaml.v3"
-	"io/ioutil"
 	"net/http"
 	"strings"
 
@@ -29,7 +28,7 @@ func NewLicenseResource() resource.Resource {
 
 // LicenseResource defines the resource implementation.
 type LicenseResource struct {
-	client   *http.Client
+	client   Client
 	endpoint string
 	token    string
 }
@@ -163,51 +162,30 @@ func (r *LicenseResource) Create(ctx context.Context, req resource.CreateRequest
 	httpReq.Header.Set("Content-Type", "text/yaml")
 	httpReq.Header.Set("Accept", "text/yaml")
 
-	httpResp, err := r.client.Do(httpReq)
+	apiResp, err := r.client.CreateLicense(ctx, data.Name.ValueString(), data.Product.ValueString(), data.Type.ValueString())
 	if err != nil {
-		resp.Diagnostics.AddError("API Call Failed", err.Error())
-		return
-	}
-	defer httpResp.Body.Close()
-
-	tflog.Debug(ctx, fmt.Sprintf("API Response Status %s", httpResp.Status))
-
-	bodyBytes, err := ioutil.ReadAll(httpResp.Body)
-	if err != nil {
-		resp.Diagnostics.AddError("Failed to read response body", err.Error())
-		return
-	}
-	tflog.Debug(ctx, fmt.Sprintf("API Response Body %s", string(bodyBytes)))
-
-	if len(bodyBytes) == 0 {
-		resp.Diagnostics.AddError("Empty Response", "The API response is empty, expected YAML.")
+		resp.Diagnostics.AddError("API call failed", err.Error())
 		return
 	}
 
-	var apiResp APIResponse
-	if err := yaml.Unmarshal(bodyBytes, &apiResp); err != nil {
-		resp.Diagnostics.AddError("Failed to parse response body", fmt.Sprintf("Error parsing YAML: %s; Response Body: %s", err, string(bodyBytes)))
-		return
-	}
-
-	tflog.Debug(ctx, fmt.Sprintf("API Response %s", apiResp.Result.JWT))
-	data.ID = basetypes.NewStringValue(apiResp.Result.License.ID)
-	data.Name = basetypes.NewStringValue(apiResp.Result.License.Name)
-	data.Product = basetypes.NewStringValue(apiResp.Result.License.Product)
-	data.Type = basetypes.NewStringValue(apiResp.Result.License.Type)
-	data.Expiration = basetypes.NewStringValue(apiResp.Result.License.Expiration)
-	data.Status = basetypes.NewStringValue(apiResp.Result.License.Status)
-	data.MaxInstances = basetypes.NewInt64Value(int64(apiResp.Result.License.MaxInstances))
-	data.CreatorID = basetypes.NewStringValue(apiResp.Result.License.Creator.ID)
-	data.ProjectID = basetypes.NewStringValue(apiResp.Result.License.Project.ID)
-	data.Offline = basetypes.NewBoolValue(apiResp.Result.License.Offline)
-	data.Created = basetypes.NewStringValue(apiResp.Result.License.Created)
-	data.MetaLastUpdated = basetypes.NewStringValue(apiResp.Result.License.Meta.LastUpdated)
-	data.MetaCreatedAt = basetypes.NewStringValue(apiResp.Result.License.Meta.CreatedAt)
-	data.MetaVersionID = basetypes.NewStringValue(apiResp.Result.License.Meta.VersionID)
-	data.Issuer = basetypes.NewStringValue(apiResp.Result.License.Issuer)
-	data.InfoHosting = basetypes.NewStringValue(apiResp.Result.License.Info.Hosting)
-	data.JWT = basetypes.NewStringValue(apiResp.Result.JWT)
+	tflog.Debug(ctx, fmt.Sprintf("API Response %s", apiResp.JWT))
+	data.ID = basetypes.NewStringValue(apiResp.License.ID)
+	data.Name = basetypes.NewStringValue(apiResp.License.Name)
+	data.Product = basetypes.NewStringValue(apiResp.License.Product)
+	data.Type = basetypes.NewStringValue(apiResp.License.Type)
+	data.Expiration = basetypes.NewStringValue(apiResp.License.Expiration)
+	data.Status = basetypes.NewStringValue(apiResp.License.Status)
+	data.MaxInstances = basetypes.NewInt64Value(int64(apiResp.License.MaxInstances))
+	data.CreatorID = basetypes.NewStringValue(apiResp.License.Creator.ID)
+	data.ProjectID = basetypes.NewStringValue(apiResp.License.Project.ID)
+	data.Offline = basetypes.NewBoolValue(apiResp.License.Offline)
+	data.Created = basetypes.NewStringValue(apiResp.License.Created)
+	data.MetaLastUpdated = basetypes.NewStringValue(apiResp.License.Meta.LastUpdated)
+	data.MetaCreatedAt = basetypes.NewStringValue(apiResp.License.Meta.CreatedAt)
+	data.MetaVersionID = basetypes.NewStringValue(apiResp.License.Meta.VersionID)
+	data.Issuer = basetypes.NewStringValue(apiResp.License.Issuer)
+	data.InfoHosting = basetypes.NewStringValue(apiResp.License.Info.Hosting)
+	data.JWT = basetypes.NewStringValue(apiResp.JWT)
 
 	// Process data further or set it in the state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)

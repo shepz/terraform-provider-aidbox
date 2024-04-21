@@ -7,6 +7,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"net/http"
 	"os" // Import for environment variables
+	"terraform-provider-aidbox/internal/aidboxclient"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/function"
@@ -29,11 +30,15 @@ type AidboxProviderModel struct {
 	Token    types.String `tfsdk:"token"`
 }
 
+type Client interface {
+	CreateLicense(cxt context.Context, name, product, licenseType string) (aidboxclient.LicenseResponse, error)
+}
+
 // This structure holds the configuration data which can be used across resources
 type ProviderData struct {
 	Endpoint string
 	Token    string
-	Client   *http.Client
+	Client   Client
 }
 
 func (p *AidboxProvider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
@@ -91,7 +96,7 @@ func (p *AidboxProvider) Configure(ctx context.Context, req provider.ConfigureRe
 	resp.ResourceData = &ProviderData{
 		Endpoint: data.Endpoint.ValueString(),
 		Token:    data.Token.ValueString(),
-		Client:   client,
+		Client:   aidboxclient.NewClient(data.Endpoint.ValueString(), data.Token.ValueString()),
 	}
 }
 
