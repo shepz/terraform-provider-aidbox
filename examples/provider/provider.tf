@@ -1,7 +1,7 @@
 terraform {
   required_providers {
     aidbox = {
-      source = "hashicorp.com/edu/aidbox"
+      source  = "hashicorp.com/edu/aidbox"
       version = "~> 1.0"
     }
   }
@@ -12,6 +12,6 @@ provider "aidbox" {
 }
 
 resource "aidbox_license" "example" {
-  name = "test-tf-guiguigui"
+  name = "test-tf-rod"
   type = "standard"
 }
