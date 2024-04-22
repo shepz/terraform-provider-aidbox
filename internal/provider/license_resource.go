@@ -213,22 +213,36 @@ func (r *LicenseResource) Update(ctx context.Context, req resource.UpdateRequest
 }
 
 func (r *LicenseResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	var data LicenseResourceModel
+	var model LicenseResourceModel
 
 	// Read Terraform prior state data into the model
-	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
-
+	diags := req.State.Get(ctx, &model)
+	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	// If applicable, this is a great opportunity to initialize any necessary
-	// provider client data and make a call using it.
-	// httpResp, err := r.client.Do(httpReq)
-	// if err != nil {
-	//     resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to delete example, got error: %s", err))
-	//     return
-	// }
+	// Ensure the ID attribute is present
+	if model.ID.IsNull() || model.ID.IsUnknown() || model.ID.ValueString() == "" {
+		resp.Diagnostics.AddError(
+			"No ID Found",
+			"Cannot delete the License without an ID.",
+		)
+		return
+	}
+
+	// Call the DeleteLicense method from the AidboxHTTPClient with the ID from the model
+	err := r.client.DeleteLicense(ctx, model.ID.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Failed to Delete License",
+			fmt.Sprintf("Error while trying to delete the License with ID %s: %s", model.ID.ValueString(), err.Error()),
+		)
+		return
+	}
+
+	// Successfully deleted the License, indicate this by marking the resource as removed
+	resp.State.RemoveResource(ctx)
 }
 
 func (r *LicenseResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
