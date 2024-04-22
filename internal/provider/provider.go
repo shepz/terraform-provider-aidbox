@@ -32,6 +32,7 @@ type AidboxProviderModel struct {
 
 type Client interface {
 	CreateLicense(cxt context.Context, name, product, licenseType string) (aidboxclient.LicenseResponse, error)
+	GetLicense(ctx context.Context, licenseID string) (aidboxclient.LicenseResponse, error)
 }
 
 // This structure holds the configuration data which can be used across resources

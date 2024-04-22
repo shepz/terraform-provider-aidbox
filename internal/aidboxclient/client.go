@@ -94,7 +94,14 @@ func (c *AidboxHTTPClient) CreateLicense(ctx context.Context, name, product, lic
 		return LicenseResponse{}, err
 	}
 
-	return parseYAMLResponse(bodyBytes)
+	apiResp, parseErr := parseYAMLResponse(bodyBytes)
+	if parseErr != nil {
+		// Log and handle any parsing errors
+		tflog.Error(ctx, "Failed to parse YAML response", map[string]interface{}{"error": parseErr, "body": string(bodyBytes)})
+		return LicenseResponse{}, parseErr
+	}
+
+	return apiResp, nil
 }
 
 func (c *AidboxHTTPClient) GetLicense(ctx context.Context, licenseID string) (LicenseResponse, error) {
@@ -105,10 +112,22 @@ func (c *AidboxHTTPClient) GetLicense(ctx context.Context, licenseID string) (Li
 
 	bodyBytes, _, err := c.makeAPICall(ctx, "portal.portal/get-license", params)
 	if err != nil {
+		if strings.Contains(err.Error(), "You are not a member of the project") {
+			// Interpret as the license not existing; return empty response without error
+			return LicenseResponse{}, nil
+		}
 		return LicenseResponse{}, err
 	}
 
-	return parseYAMLResponse(bodyBytes)
+	// If the API call was successful, parse the response
+	apiResp, parseErr := parseYAMLResponse(bodyBytes)
+	if parseErr != nil {
+		// Log and handle any parsing errors
+		tflog.Error(ctx, "Failed to parse YAML response", map[string]interface{}{"error": parseErr, "body": string(bodyBytes)})
+		return LicenseResponse{}, parseErr
+	}
+
+	return apiResp, nil
 }
 
 func (c *AidboxHTTPClient) DeleteLicense(ctx context.Context, licenseID string) error {

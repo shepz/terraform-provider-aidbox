@@ -9,6 +9,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"terraform-provider-aidbox/internal/aidboxclient"
@@ -65,7 +66,9 @@ func (r *LicenseResource) Schema(ctx context.Context, req resource.SchemaRequest
 				Required: true,
 			},
 			"product": schema.StringAttribute{
-				Required: true,
+				Optional: true,
+				Computed: true,
+				Default:  stringdefault.StaticString("aidbox"),
 			},
 			"type": schema.StringAttribute{
 				Required: true,
@@ -153,46 +156,38 @@ func (r *LicenseResource) Create(ctx context.Context, req resource.CreateRequest
 	resp.Diagnostics.Append(resp.State.Set(ctx, &model)...)
 }
 
-func mapModelFromAPIResponse(model *LicenseResourceModel, apiResp aidboxclient.LicenseResponse) {
-	model.ID = basetypes.NewStringValue(apiResp.License.ID)
-	model.Name = basetypes.NewStringValue(apiResp.License.Name)
-	model.Product = basetypes.NewStringValue(apiResp.License.Product)
-	model.Type = basetypes.NewStringValue(apiResp.License.Type)
-	model.Expiration = basetypes.NewStringValue(apiResp.License.Expiration)
-	model.Status = basetypes.NewStringValue(apiResp.License.Status)
-	model.MaxInstances = basetypes.NewInt64Value(int64(apiResp.License.MaxInstances))
-	model.CreatorID = basetypes.NewStringValue(apiResp.License.Creator.ID)
-	model.ProjectID = basetypes.NewStringValue(apiResp.License.Project.ID)
-	model.Offline = basetypes.NewBoolValue(apiResp.License.Offline)
-	model.Created = basetypes.NewStringValue(apiResp.License.Created)
-	model.MetaLastUpdated = basetypes.NewStringValue(apiResp.License.Meta.LastUpdated)
-	model.MetaCreatedAt = basetypes.NewStringValue(apiResp.License.Meta.CreatedAt)
-	model.MetaVersionID = basetypes.NewStringValue(apiResp.License.Meta.VersionID)
-	model.Issuer = basetypes.NewStringValue(apiResp.License.Issuer)
-	model.InfoHosting = basetypes.NewStringValue(apiResp.License.Info.Hosting)
-	model.JWT = basetypes.NewStringValue(apiResp.JWT)
-}
-
 func (r *LicenseResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	var data LicenseResourceModel
+	var model LicenseResourceModel
 
-	// Read Terraform prior state data into the model
-	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
-
+	// Read Terraform state data into the model
+	diags := req.State.Get(ctx, &model)
+	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	// If applicable, this is a great opportunity to initialize any necessary
-	// provider client data and make a call using it.
-	// httpResp, err := r.client.Do(httpReq)
-	// if err != nil {
-	//     resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to read example, got error: %s", err))
-	//     return
-	// }
+	// Ensure the ID attribute is present
+	if model.ID.IsUnknown() || model.ID.IsNull() || model.ID.ValueString() == "" {
+		resp.Diagnostics.AddError(
+			"No ID Present",
+			"An ID must be present to read the License",
+		)
+		return
+	}
 
-	// Save updated data into Terraform state
-	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	// Use the client to fetch the license data from the API
+	apiResp, err := r.client.GetLicense(ctx, model.ID.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to Fetch License", fmt.Sprintf("Unable to fetch license: %s", err))
+		return
+	}
+
+	// Map the API response back to the Terraform model
+	mapModelFromAPIResponse(&model, apiResp)
+
+	// Save the updated model back into the Terraform state
+	diags = resp.State.Set(ctx, &model)
+	resp.Diagnostics.Append(diags...)
 }
 
 func (r *LicenseResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
@@ -238,4 +233,24 @@ func (r *LicenseResource) Delete(ctx context.Context, req resource.DeleteRequest
 
 func (r *LicenseResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+}
+
+func mapModelFromAPIResponse(model *LicenseResourceModel, apiResp aidboxclient.LicenseResponse) {
+	model.ID = basetypes.NewStringValue(apiResp.License.ID)
+	model.Name = basetypes.NewStringValue(apiResp.License.Name)
+	model.Product = basetypes.NewStringValue(apiResp.License.Product)
+	model.Type = basetypes.NewStringValue(apiResp.License.Type)
+	model.Expiration = basetypes.NewStringValue(apiResp.License.Expiration)
+	model.Status = basetypes.NewStringValue(apiResp.License.Status)
+	model.MaxInstances = basetypes.NewInt64Value(int64(apiResp.License.MaxInstances))
+	model.CreatorID = basetypes.NewStringValue(apiResp.License.Creator.ID)
+	model.ProjectID = basetypes.NewStringValue(apiResp.License.Project.ID)
+	model.Offline = basetypes.NewBoolValue(apiResp.License.Offline)
+	model.Created = basetypes.NewStringValue(apiResp.License.Created)
+	model.MetaLastUpdated = basetypes.NewStringValue(apiResp.License.Meta.LastUpdated)
+	model.MetaCreatedAt = basetypes.NewStringValue(apiResp.License.Meta.CreatedAt)
+	model.MetaVersionID = basetypes.NewStringValue(apiResp.License.Meta.VersionID)
+	model.Issuer = basetypes.NewStringValue(apiResp.License.Issuer)
+	model.InfoHosting = basetypes.NewStringValue(apiResp.License.Info.Hosting)
+	model.JWT = basetypes.NewStringValue(apiResp.JWT)
 }

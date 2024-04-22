@@ -13,6 +13,5 @@ provider "aidbox" {
 
 resource "aidbox_license" "example" {
   name = "test-tf-guigui"
-  product = "aidbox"
   type = "standard"
 }
