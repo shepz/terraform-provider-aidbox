@@ -3,12 +3,11 @@ package aidboxclient
 import (
 	"context"
 	"fmt"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"gopkg.in/yaml.v3"
 	"io/ioutil"
 	"net/http"
 	"strings"
-
-	"github.com/hashicorp/terraform-plugin-log/tflog"
-	"gopkg.in/yaml.v3"
 )
 
 type AidboxHTTPClient struct {
@@ -83,32 +82,59 @@ func NewClient(endpoint, token string) *AidboxHTTPClient {
 }
 
 func (c *AidboxHTTPClient) CreateLicense(ctx context.Context, name, product, licenseType string) (LicenseResponse, error) {
-	tflog.Debug(ctx, "Creating license", map[string]interface{}{
+	params := map[string]interface{}{
+		"token":   c.Token,
 		"name":    name,
 		"product": product,
 		"type":    licenseType,
-	})
+	}
 
+	bodyBytes, _, err := c.makeAPICall(ctx, "portal.portal/issue-license", params)
+	if err != nil {
+		return LicenseResponse{}, err
+	}
+
+	return parseYAMLResponse(bodyBytes)
+}
+
+func (c *AidboxHTTPClient) GetLicense(ctx context.Context, licenseID string) (LicenseResponse, error) {
+	params := map[string]interface{}{
+		"token": c.Token,
+		"id":    licenseID,
+	}
+
+	bodyBytes, _, err := c.makeAPICall(ctx, "portal.portal/get-license", params)
+	if err != nil {
+		return LicenseResponse{}, err
+	}
+
+	return parseYAMLResponse(bodyBytes)
+}
+
+func (c *AidboxHTTPClient) DeleteLicense(ctx context.Context, licenseID string) error {
+	_, _, err := c.makeAPICall(ctx, "portal.portal/remove-license", map[string]interface{}{
+		"token": c.Token,
+		"id":    licenseID,
+	})
+	return err
+}
+
+func (c *AidboxHTTPClient) makeAPICall(ctx context.Context, method string, params map[string]interface{}) ([]byte, int, error) {
 	requestBody := map[string]interface{}{
-		"method": "portal.portal/issue-license",
-		"params": map[string]interface{}{
-			"token":   c.Token,
-			"name":    name,
-			"product": product,
-			"type":    licenseType,
-		},
+		"method": method,
+		"params": params,
 	}
 
 	yamlData, err := yaml.Marshal(requestBody)
 	if err != nil {
 		tflog.Error(ctx, "Failed to create YAML request body", map[string]interface{}{"error": err})
-		return LicenseResponse{}, fmt.Errorf("failed to create YAML request body: %w", err)
+		return nil, 0, fmt.Errorf("failed to create YAML request body: %w", err)
 	}
 
 	req, err := http.NewRequest("POST", c.Endpoint, strings.NewReader(string(yamlData)))
 	if err != nil {
 		tflog.Error(ctx, "Failed to create HTTP request", map[string]interface{}{"error": err})
-		return LicenseResponse{}, fmt.Errorf("failed to create HTTP request: %w", err)
+		return nil, 0, fmt.Errorf("failed to create HTTP request: %w", err)
 	}
 	req.Header.Set("Content-Type", "text/yaml")
 	req.Header.Set("Accept", "text/yaml")
@@ -116,14 +142,14 @@ func (c *AidboxHTTPClient) CreateLicense(ctx context.Context, name, product, lic
 	resp, err := c.Client.Do(req)
 	if err != nil {
 		tflog.Error(ctx, "API call failed", map[string]interface{}{"error": err})
-		return LicenseResponse{}, fmt.Errorf("API call failed: %w", err)
+		return nil, resp.StatusCode, fmt.Errorf("API call failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	bodyBytes, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		tflog.Error(ctx, "Failed to read response body", map[string]interface{}{"error": err})
-		return LicenseResponse{}, fmt.Errorf("failed to read response body: %w", err)
+		return nil, resp.StatusCode, fmt.Errorf("failed to read response body: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -131,15 +157,17 @@ func (c *AidboxHTTPClient) CreateLicense(ctx context.Context, name, product, lic
 			"status": resp.Status,
 			"body":   string(bodyBytes),
 		})
-		return LicenseResponse{}, fmt.Errorf("API response error: %s; Body: %s", resp.Status, string(bodyBytes))
+		return nil, resp.StatusCode, fmt.Errorf("API response error: %s; Body: %s", resp.Status, string(bodyBytes))
 	}
 
+	return bodyBytes, resp.StatusCode, nil
+}
+
+func parseYAMLResponse(bodyBytes []byte) (LicenseResponse, error) {
 	var apiResp APIResponse
 	if err := yaml.Unmarshal(bodyBytes, &apiResp); err != nil {
-		tflog.Error(ctx, "Failed to parse YAML response", map[string]interface{}{"error": err, "body": string(bodyBytes)})
-		return LicenseResponse{}, fmt.Errorf("failed to parse YAML response: %s; Body: %s", err, string(bodyBytes))
+		return LicenseResponse{}, fmt.Errorf("failed to parse YAML response: %w", err)
 	}
-
 	return LicenseResponse{
 		License: apiResp.Result.License,
 		JWT:     apiResp.Result.JWT,
