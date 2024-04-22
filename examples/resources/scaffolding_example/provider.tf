@@ -8,10 +8,5 @@ terraform {
 }
 
 provider "aidbox" {
-  endpoint = "https://aidbox.app/rpc"
-}
-
-resource "aidbox_license" "example" {
-  name = "test-tf-rod"
-  type = "standard"
+  endpoint = "http://localhost:8080"
 }

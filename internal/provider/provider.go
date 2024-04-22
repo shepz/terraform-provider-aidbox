@@ -1,11 +1,13 @@
-// Copyright (c) HashiCorp, Inc.
 // SPDX-License-Identifier: MPL-2.0
 
 package provider
 
 import (
 	"context"
+	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"net/http"
+	"os" // Import for environment variables
+	"terraform-provider-aidbox/internal/aidboxclient"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/function"
@@ -15,41 +17,54 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-// Ensure ScaffoldingProvider satisfies various provider interfaces.
-var _ provider.Provider = &ScaffoldingProvider{}
-var _ provider.ProviderWithFunctions = &ScaffoldingProvider{}
+// Ensure AidboxProvider satisfies various provider interfaces.
+var _ provider.Provider = &AidboxProvider{}
+var _ provider.ProviderWithFunctions = &AidboxProvider{}
 
-// ScaffoldingProvider defines the provider implementation.
-type ScaffoldingProvider struct {
-	// version is set to the provider version on release, "dev" when the
-	// provider is built and ran locally, and "test" when running acceptance
-	// testing.
+type AidboxProvider struct {
 	version string
 }
 
-// ScaffoldingProviderModel describes the provider data model.
-type ScaffoldingProviderModel struct {
+type AidboxProviderModel struct {
 	Endpoint types.String `tfsdk:"endpoint"`
+	Token    types.String `tfsdk:"token"`
 }
 
-func (p *ScaffoldingProvider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
-	resp.TypeName = "scaffolding"
+type Client interface {
+	CreateLicense(cxt context.Context, name, product, licenseType string) (aidboxclient.LicenseResponse, error)
+	GetLicense(ctx context.Context, licenseID string) (aidboxclient.LicenseResponse, error)
+	DeleteLicense(ctx context.Context, licenseID string) error
+}
+
+// This structure holds the configuration data which can be used across resources
+type ProviderData struct {
+	Endpoint string
+	Token    string
+	Client   Client
+}
+
+func (p *AidboxProvider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
+	resp.TypeName = "aidbox"
 	resp.Version = p.version
 }
 
-func (p *ScaffoldingProvider) Schema(ctx context.Context, req provider.SchemaRequest, resp *provider.SchemaResponse) {
+func (p *AidboxProvider) Schema(ctx context.Context, req provider.SchemaRequest, resp *provider.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"endpoint": schema.StringAttribute{
-				MarkdownDescription: "Example provider attribute",
+				MarkdownDescription: "Aidbox RPC API endpoint",
+				Optional:            true,
+			},
+			"token": schema.StringAttribute{
+				MarkdownDescription: "Aidbox token",
 				Optional:            true,
 			},
 		},
 	}
 }
 
-func (p *ScaffoldingProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
-	var data ScaffoldingProviderModel
+func (p *AidboxProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
+	var data AidboxProviderModel
 
 	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
 
@@ -57,28 +72,50 @@ func (p *ScaffoldingProvider) Configure(ctx context.Context, req provider.Config
 		return
 	}
 
-	// Configuration values are now available.
-	// if data.Endpoint.IsNull() { /* ... */ }
+	// Set default endpoint if not provided
+	if data.Endpoint.IsNull() || data.Endpoint.IsUnknown() || data.Endpoint.ValueString() == "" {
+		defaultEndpoint := basetypes.NewStringValue("https://aidbox.app/rpc")
+		data.Endpoint = defaultEndpoint
+	}
+
+	// Handle token; get from environment variable if not provided
+	if data.Token.IsNull() || data.Token.IsUnknown() || data.Token.ValueString() == "" {
+		tokenEnv := os.Getenv("AIDBOX_TOKEN")
+		if tokenEnv != "" {
+			data.Token = basetypes.NewStringValue(tokenEnv)
+		} else {
+			resp.Diagnostics.AddError(
+				"No Token Provided",
+				"Please provide a 'token' in the provider configuration or through the 'AIDBOX_TOKEN' environment variable.",
+			)
+			return
+		}
+	}
 
 	// Example client configuration for data sources and resources
 	client := http.DefaultClient
 	resp.DataSourceData = client
-	resp.ResourceData = client
-}
-
-func (p *ScaffoldingProvider) Resources(ctx context.Context) []func() resource.Resource {
-	return []func() resource.Resource{
-		NewExampleResource,
+	resp.ResourceData = &ProviderData{
+		Endpoint: data.Endpoint.ValueString(),
+		Token:    data.Token.ValueString(),
+		Client:   aidboxclient.NewClient(data.Endpoint.ValueString(), data.Token.ValueString()),
 	}
 }
 
-func (p *ScaffoldingProvider) DataSources(ctx context.Context) []func() datasource.DataSource {
+func (p *AidboxProvider) Resources(ctx context.Context) []func() resource.Resource {
+	return []func() resource.Resource{
+		NewExampleResource,
+		NewLicenseResource,
+	}
+}
+
+func (p *AidboxProvider) DataSources(ctx context.Context) []func() datasource.DataSource {
 	return []func() datasource.DataSource{
 		NewExampleDataSource,
 	}
 }
 
-func (p *ScaffoldingProvider) Functions(ctx context.Context) []func() function.Function {
+func (p *AidboxProvider) Functions(ctx context.Context) []func() function.Function {
 	return []func() function.Function{
 		NewExampleFunction,
 	}
@@ -86,7 +123,7 @@ func (p *ScaffoldingProvider) Functions(ctx context.Context) []func() function.F
 
 func New(version string) func() provider.Provider {
 	return func() provider.Provider {
-		return &ScaffoldingProvider{
+		return &AidboxProvider{
 			version: version,
 		}
 	}
